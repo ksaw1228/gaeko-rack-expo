@@ -22,6 +22,27 @@ const getApiUrl = () => {
 
 export const API_URL = getApiUrl();
 
+// Get base server URL (without /api)
+const getServerUrl = () => {
+  if (__DEV__) {
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      return `http://${LOCAL_IP}:3001`;
+    } else {
+      return 'http://localhost:3001';
+    }
+  }
+  return 'https://your-production-server.com';
+};
+
+export const SERVER_URL = getServerUrl();
+
+// Helper to get full image URL from relative path
+export const getImageUrl = (path: string | null | undefined): string | undefined => {
+  if (!path) return undefined;
+  if (path.startsWith('http')) return path;
+  return `${SERVER_URL}${path}`;
+};
+
 // Care threshold days - after this many days without feeding/cleaning, status becomes urgent
 export const CARE_THRESHOLD_DAYS = 3;
 

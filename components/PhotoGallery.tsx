@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { COLORS } from '../constants/config';
+import { COLORS, getImageUrl } from '../constants/config';
 import { uploadGeckoPhotoWithDate, setMainPhoto, deletePhoto } from '../services/api';
 import type { Photo } from '../types';
 
@@ -130,7 +130,7 @@ export default function PhotoGallery({ geckoId, photos, onPhotosChange }: PhotoG
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.previewScroll}>
           {photos.slice(0, 5).map((photo) => (
             <View key={photo.id} style={styles.previewItem}>
-              <Image source={{ uri: photo.photoUrl }} style={styles.previewImage} />
+              <Image source={{ uri: getImageUrl(photo.photoUrl) }} style={styles.previewImage} />
               {photo.isMain && (
                 <View style={styles.mainBadge}>
                   <Text style={styles.mainBadgeText}>대표</Text>
@@ -199,7 +199,7 @@ export default function PhotoGallery({ geckoId, photos, onPhotosChange }: PhotoG
               <View style={styles.galleryGrid}>
                 {photos.map((photo) => (
                   <View key={photo.id} style={styles.galleryItem}>
-                    <Image source={{ uri: photo.photoUrl }} style={styles.galleryImage} />
+                    <Image source={{ uri: getImageUrl(photo.photoUrl) }} style={styles.galleryImage} />
                     {photo.isMain && (
                       <View style={styles.mainBadgeLarge}>
                         <Text style={styles.mainBadgeLargeText}>대표</Text>

@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
-import { COLORS } from '../constants/config';
+import { COLORS, getImageUrl } from '../constants/config';
 import type { Gecko, Gender } from '../types';
 import { GENDERS } from '../types';
 
@@ -97,7 +97,7 @@ export default function GeckoDetail({
         <View style={styles.infoSection}>
           <View style={styles.photoSection}>
             {photoUrl ? (
-              <Image source={{ uri: photoUrl }} style={styles.photo} />
+              <Image source={{ uri: getImageUrl(photoUrl) }} style={styles.photo} />
             ) : (
               <View style={styles.photoPlaceholder}>
                 <Text style={styles.photoPlaceholderText}>🦎</Text>

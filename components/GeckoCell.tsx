@@ -1,5 +1,5 @@
 import { Pressable, View, Text, Image, StyleSheet } from 'react-native';
-import { COLORS } from '../constants/config';
+import { COLORS, getImageUrl } from '../constants/config';
 import type { Cell } from '../types';
 
 interface GeckoCellProps {
@@ -69,7 +69,7 @@ export default function GeckoCell({
         <View style={styles.geckoContent}>
           {gecko.photoUrl ? (
             <>
-              <Image source={{ uri: gecko.photoUrl }} style={styles.photo} />
+              <Image source={{ uri: getImageUrl(gecko.photoUrl) }} style={styles.photo} />
               <View style={styles.photoOverlay} />
               <View style={[styles.statusBadge, { backgroundColor: statusBadgeColors[status] }]} />
               <View style={styles.nameContainer}>
