@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { getRacks, moveGecko, swapGeckos } from '../../services/api';
+import { getRacks, moveGecko, swapGeckos, ApiError } from '../../services/api';
 import { COLORS, CARE_THRESHOLD_DAYS } from '../../constants/config';
 import type { Rack, Gecko, Cell } from '../../types';
 import RackGrid from '../../components/RackGrid';
@@ -26,6 +26,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRack, setEditingRack] = useState<Rack | null>(null);
+  const isMounted = useRef(true);
 
   // Move mode state
   const [moveMode, setMoveMode] = useState(false);
@@ -34,17 +35,30 @@ export default function HomeScreen() {
   const loadRacks = useCallback(async () => {
     try {
       const data = await getRacks();
-      setRacks(data);
-    } catch (error: any) {
-      Alert.alert('오류', '랙 목록을 불러오는데 실패했습니다.');
+      if (isMounted.current) {
+        setRacks(data);
+      }
+    } catch (error: unknown) {
+      if (isMounted.current) {
+        const message = error instanceof ApiError
+          ? error.message
+          : '랙 목록을 불러오는데 실패했습니다.';
+        Alert.alert('오류', message);
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (isMounted.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    isMounted.current = true;
     loadRacks();
+    return () => {
+      isMounted.current = false;
+    };
   }, [loadRacks]);
 
   const onRefresh = useCallback(() => {

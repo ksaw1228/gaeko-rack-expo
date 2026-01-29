@@ -151,6 +151,7 @@ export default function GeckoDetail({
             value={form.name}
             onChangeText={(text) => setForm({ ...form, name: text })}
             placeholder="이름을 입력하세요"
+            maxLength={50}
           />
         </View>
 
@@ -161,6 +162,7 @@ export default function GeckoDetail({
             value={form.morph}
             onChangeText={(text) => setForm({ ...form, morph: text })}
             placeholder="예: Harlequin, Dalmatian"
+            maxLength={100}
           />
         </View>
 
@@ -186,6 +188,7 @@ export default function GeckoDetail({
             value={form.birthDate}
             onChangeText={(text) => setForm({ ...form, birthDate: text })}
             placeholder="YYYY-MM-DD"
+            maxLength={10}
           />
         </View>
 
@@ -197,6 +200,7 @@ export default function GeckoDetail({
             onChangeText={(text) => setForm({ ...form, weight: text })}
             keyboardType="numeric"
             placeholder="체중을 입력하세요"
+            maxLength={10}
           />
         </View>
 
@@ -209,6 +213,7 @@ export default function GeckoDetail({
             placeholder="메모를 입력하세요"
             multiline
             numberOfLines={3}
+            maxLength={500}
           />
         </View>
 

@@ -1,4 +1,4 @@
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosError } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { API_URL } from '../constants/config';
@@ -21,23 +21,108 @@ import type {
 
 const TOKEN_KEY = 'auth_token';
 
+// Custom error class for API errors
+export class ApiError extends Error {
+  public status?: number;
+  public isNetworkError: boolean;
+
+  constructor(message: string, status?: number, isNetworkError = false) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.isNetworkError = isNetworkError;
+  }
+}
+
+// Sanitize error message to avoid exposing internal details
+const sanitizeErrorMessage = (error: AxiosError): string => {
+  // Network error (no response)
+  if (!error.response) {
+    if (error.code === 'ECONNABORTED') {
+      return '요청 시간이 초과되었습니다. 네트워크 연결을 확인해주세요.';
+    }
+    return '네트워크 연결을 확인해주세요.';
+  }
+
+  // Server error response
+  const status = error.response.status;
+  const data = error.response.data as { message?: string; error?: string } | undefined;
+
+  // Only show user-friendly messages from server
+  if (data?.message && typeof data.message === 'string' && data.message.length < 200) {
+    // Filter out technical error messages
+    if (!data.message.includes('Error:') && !data.message.includes('TypeError')) {
+      return data.message;
+    }
+  }
+
+  // Generic messages based on status code
+  switch (status) {
+    case 400:
+      return '잘못된 요청입니다.';
+    case 401:
+      return '로그인이 필요합니다.';
+    case 403:
+      return '접근 권한이 없습니다.';
+    case 404:
+      return '요청한 데이터를 찾을 수 없습니다.';
+    case 409:
+      return '중복된 데이터가 존재합니다.';
+    case 500:
+    default:
+      return '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+  }
+};
+
 // Create axios instance
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 15000, // Increased timeout for slower connections
 });
+
+// Safe localStorage access for web
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem(key);
+      }
+    } catch {
+      // localStorage not available (e.g., private browsing)
+    }
+    return null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(key, value);
+      }
+    } catch {
+      // localStorage not available
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // localStorage not available
+    }
+  },
+};
 
 // Token storage helpers (SecureStore doesn't work on web)
 const getToken = async (): Promise<string | null> => {
   if (Platform.OS === 'web') {
-    return localStorage.getItem(TOKEN_KEY);
+    return safeLocalStorage.getItem(TOKEN_KEY);
   }
   return await SecureStore.getItemAsync(TOKEN_KEY);
 };
 
 const setToken = async (token: string): Promise<void> => {
   if (Platform.OS === 'web') {
-    localStorage.setItem(TOKEN_KEY, token);
+    safeLocalStorage.setItem(TOKEN_KEY, token);
     return;
   }
   await SecureStore.setItemAsync(TOKEN_KEY, token);
@@ -45,7 +130,7 @@ const setToken = async (token: string): Promise<void> => {
 
 const removeToken = async (): Promise<void> => {
   if (Platform.OS === 'web') {
-    localStorage.removeItem(TOKEN_KEY);
+    safeLocalStorage.removeItem(TOKEN_KEY);
     return;
   }
   await SecureStore.deleteItemAsync(TOKEN_KEY);
@@ -60,14 +145,21 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Response interceptor - handle 401
+// Response interceptor - handle errors
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
+  async (error: AxiosError) => {
+    // Handle 401 - unauthorized
     if (error.response?.status === 401) {
       await removeToken();
     }
-    return Promise.reject(error);
+
+    // Create sanitized error
+    const message = sanitizeErrorMessage(error);
+    const isNetworkError = !error.response;
+    const apiError = new ApiError(message, error.response?.status, isNetworkError);
+
+    return Promise.reject(apiError);
   }
 );
 

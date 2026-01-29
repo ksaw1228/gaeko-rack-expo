@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import * as api from '../services/api';
 import type { User } from '../types';
 
@@ -19,25 +19,34 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const isMounted = useRef(true);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const hasStoredToken = await api.hasToken();
       if (hasStoredToken) {
         const currentUser = await api.getCurrentUser();
-        setUser(currentUser);
+        if (isMounted.current) {
+          setUser(currentUser);
+        }
       }
     } catch (error) {
-      // Token invalid or expired
+      // Token invalid or expired - silently logout
       await api.logout();
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    isMounted.current = true;
+    checkAuth();
+    return () => {
+      isMounted.current = false;
+    };
+  }, [checkAuth]);
 
   const login = async (email: string, password: string): Promise<User> => {
     const { user: loggedInUser } = await api.login(email, password);

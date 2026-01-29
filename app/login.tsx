@@ -15,6 +15,13 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../constants/config';
+import { ApiError } from '../services/api';
+
+// Simple email validation
+const isValidEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
 
 export default function LoginScreen() {
   const { login, register } = useAuth();
@@ -25,12 +32,27 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    if (!email || !password) {
+    // Input validation
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedName = name.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
       Alert.alert('오류', '이메일과 비밀번호를 입력해주세요.');
       return;
     }
 
-    if (isRegister && !name) {
+    if (!isValidEmail(trimmedEmail)) {
+      Alert.alert('오류', '올바른 이메일 형식을 입력해주세요.');
+      return;
+    }
+
+    if (trimmedPassword.length < 4) {
+      Alert.alert('오류', '비밀번호는 4자 이상이어야 합니다.');
+      return;
+    }
+
+    if (isRegister && !trimmedName) {
       Alert.alert('오류', '이름을 입력해주세요.');
       return;
     }
@@ -38,13 +60,16 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       if (isRegister) {
-        await register(email, password, name);
+        await register(trimmedEmail, trimmedPassword, trimmedName);
       } else {
-        await login(email, password);
+        await login(trimmedEmail, trimmedPassword);
       }
       router.replace('/(main)');
-    } catch (error: any) {
-      const message = error.response?.data?.message || error.message || '오류가 발생했습니다.';
+    } catch (error: unknown) {
+      // Use sanitized error message from ApiError
+      const message = error instanceof ApiError
+        ? error.message
+        : '오류가 발생했습니다. 다시 시도해주세요.';
       Alert.alert('오류', message);
     } finally {
       setLoading(false);
@@ -81,6 +106,7 @@ export default function LoginScreen() {
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="none"
+                  maxLength={50}
                 />
               </View>
             )}
@@ -95,6 +121,7 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                maxLength={100}
               />
             </View>
 
@@ -106,6 +133,7 @@ export default function LoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
+                maxLength={100}
               />
             </View>
 

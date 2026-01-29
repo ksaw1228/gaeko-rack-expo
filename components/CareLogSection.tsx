@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,22 @@ import { COLORS } from '../constants/config';
 import { createCareLog, deleteCareLog } from '../services/api';
 import type { CareLog, CareType } from '../types';
 import { CARE_TYPES, LAYING_OPTIONS } from '../types';
+
+// Validate date string format (YYYY-MM-DD)
+const isValidDate = (dateStr: string): boolean => {
+  const regex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!regex.test(dateStr)) return false;
+  const date = new Date(dateStr);
+  return !isNaN(date.getTime());
+};
+
+// Validate time string format (HH:MM)
+const isValidTime = (timeStr: string): boolean => {
+  const regex = /^\d{2}:\d{2}$/;
+  if (!regex.test(timeStr)) return false;
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+};
 
 interface CareLogSectionProps {
   geckoId: number;
@@ -29,6 +45,8 @@ export default function CareLogSection({
   const [successType, setSuccessType] = useState<CareType | null>(null);
   const [deletingLogId, setDeletingLogId] = useState<number | null>(null);
   const [showAllLogs, setShowAllLogs] = useState(false);
+  const successTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastClickTimeRef = useRef<number>(0);
 
   // Popup states
   const [showWeightPopup, setShowWeightPopup] = useState(false);
@@ -46,15 +64,43 @@ export default function CareLogSection({
   const [customDate, setCustomDate] = useState('');
   const [customTime, setCustomTime] = useState('');
 
-  const handleCareLog = async (type: CareType, note = '', value = '') => {
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCareLog = useCallback(async (type: CareType, note = '', value = '') => {
+    // Debounce: prevent rapid clicks (500ms)
+    const now = Date.now();
+    if (now - lastClickTimeRef.current < 500) {
+      return;
+    }
+    lastClickTimeRef.current = now;
+
     setLoadingType(type);
     setSuccessType(null);
 
     try {
-      const logData: any = { type, note, value };
+      const logData: { type: CareType; note: string; value: string; createdAt?: string } = { type, note, value };
 
       if (usePastDate && customDate && customTime) {
-        logData.createdAt = new Date(`${customDate}T${customTime}:00`).toISOString();
+        // Validate date/time before using
+        if (!isValidDate(customDate) || !isValidTime(customTime)) {
+          Alert.alert('오류', '날짜 또는 시간 형식이 올바르지 않습니다.');
+          setLoadingType(null);
+          return;
+        }
+        const dateTime = new Date(`${customDate}T${customTime}:00`);
+        if (isNaN(dateTime.getTime())) {
+          Alert.alert('오류', '유효하지 않은 날짜입니다.');
+          setLoadingType(null);
+          return;
+        }
+        logData.createdAt = dateTime.toISOString();
       }
 
       const newLog = await createCareLog(geckoId, logData);
@@ -65,19 +111,23 @@ export default function CareLogSection({
       onCareLogsChange(updated);
 
       setSuccessType(type);
-      setTimeout(() => setSuccessType(null), 2000);
+      // Clear previous timeout before setting new one
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+      successTimeoutRef.current = setTimeout(() => setSuccessType(null), 2000);
 
       if (usePastDate) {
         setUsePastDate(false);
         setCustomDate('');
         setCustomTime('');
       }
-    } catch (error: any) {
-      Alert.alert('오류', '기록 추가에 실패했습니다.');
+    } catch (error: unknown) {
+      Alert.alert('오류', '기록 추가에 실패했습니다. 네트워크 연결을 확인해주세요.');
     } finally {
       setLoadingType(null);
     }
-  };
+  }, [geckoId, careLogs, onCareLogsChange, usePastDate, customDate, customTime]);
 
   const handleCareButtonClick = (type: CareType) => {
     if (['FEEDING', 'CLEANING', 'SHEDDING'].includes(type)) {

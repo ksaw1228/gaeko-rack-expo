@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,13 @@ import CareLogSection from '../../../components/CareLogSection';
 import PhotoGallery from '../../../components/PhotoGallery';
 import WeightChart from '../../../components/WeightChart';
 
+// Safe parseInt with NaN check
+const safeParseInt = (value: string | undefined): number | null => {
+  if (!value) return null;
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? null : parsed;
+};
+
 export default function GeckoScreen() {
   const params = useLocalSearchParams<{
     id: string;
@@ -34,10 +41,10 @@ export default function GeckoScreen() {
   }>();
 
   const isNew = params.id === 'new';
-  const geckoId = isNew ? null : parseInt(params.id, 10);
-  const rackId = params.rackId ? parseInt(params.rackId, 10) : null;
-  const row = params.row ? parseInt(params.row, 10) : null;
-  const col = params.col ? parseInt(params.col, 10) : null;
+  const geckoId = isNew ? null : safeParseInt(params.id);
+  const rackId = safeParseInt(params.rackId);
+  const row = safeParseInt(params.row);
+  const col = safeParseInt(params.col);
 
   const [gecko, setGecko] = useState<Gecko | null>(null);
   const [careLogs, setCareLogs] = useState<CareLog[]>([]);
@@ -45,6 +52,7 @@ export default function GeckoScreen() {
   const [loading, setLoading] = useState(!isNew);
   const [isEditing, setIsEditing] = useState(isNew);
   const [showWeightChart, setShowWeightChart] = useState(false);
+  const isMounted = useRef(true);
 
   const loadGeckoData = useCallback(async () => {
     if (!geckoId) return;
@@ -55,19 +63,29 @@ export default function GeckoScreen() {
         getGeckoLogs(geckoId),
         getGeckoPhotos(geckoId),
       ]);
-      setGecko(geckoData);
-      setCareLogs(logsData);
-      setPhotos(photosData);
-    } catch (error: any) {
-      Alert.alert('오류', '게코 정보를 불러오는데 실패했습니다.');
-      router.back();
+      if (isMounted.current) {
+        setGecko(geckoData);
+        setCareLogs(logsData);
+        setPhotos(photosData);
+      }
+    } catch (error: unknown) {
+      if (isMounted.current) {
+        Alert.alert('오류', '게코 정보를 불러오는데 실패했습니다.');
+        router.back();
+      }
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   }, [geckoId]);
 
   useEffect(() => {
+    isMounted.current = true;
     loadGeckoData();
+    return () => {
+      isMounted.current = false;
+    };
   }, [loadGeckoData]);
 
   const handleSave = async (data: any) => {
