@@ -37,7 +37,7 @@ export default function PhotoGallery({ geckoId, photos, onPhotosChange }: PhotoG
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.8,
     });
 
