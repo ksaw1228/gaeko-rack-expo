@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Gecko Rack Manager",
+    "slug": "gecko-rack-expo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "gecko-rack",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#10b981"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.geckorack.manager"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#10b981"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.geckorack.manager"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you upload gecko images."
+        }
+      ]
+    ]
+  }
+}
