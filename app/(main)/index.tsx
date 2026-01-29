@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,16 +19,6 @@ import RackGrid from '../../components/RackGrid';
 import AddRackModal from '../../components/modals/AddRackModal';
 import EditRackModal from '../../components/modals/EditRackModal';
 
-interface CellLayoutInfo {
-  rackId: number;
-  row: number;
-  col: number;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 export default function HomeScreen() {
   const { user, logout } = useAuth();
   const [racks, setRacks] = useState<Rack[]>([]);
@@ -37,9 +27,9 @@ export default function HomeScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRack, setEditingRack] = useState<Rack | null>(null);
 
-  // Drag state
-  const [draggingGecko, setDraggingGecko] = useState<{ gecko: Gecko; rackId: number } | null>(null);
-  const cellLayouts = useRef<CellLayoutInfo[]>([]);
+  // Move mode state
+  const [moveMode, setMoveMode] = useState(false);
+  const [selectedGecko, setSelectedGecko] = useState<{ gecko: Gecko; rackId: number } | null>(null);
 
   const loadRacks = useCallback(async () => {
     try {
@@ -59,7 +49,6 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    cellLayouts.current = [];
     loadRacks();
   }, [loadRacks]);
 
@@ -78,8 +67,13 @@ export default function HomeScreen() {
   };
 
   const handleCellPress = (cell: Cell, rackId: number) => {
-    if (draggingGecko) return;
+    // If in move mode
+    if (moveMode && selectedGecko) {
+      handleMoveOrSwap(cell, rackId);
+      return;
+    }
 
+    // Normal mode - view gecko or create new
     if (cell.gecko) {
       router.push(`/gecko/${cell.gecko.id}?rackId=${rackId}&row=${cell.row}&col=${cell.col}`);
     } else {
@@ -87,77 +81,88 @@ export default function HomeScreen() {
     }
   };
 
-  const registerCellLayout = useCallback((rackId: number, row: number, col: number, layout: { x: number; y: number; width: number; height: number }) => {
-    cellLayouts.current = cellLayouts.current.filter(
-      (l) => !(l.rackId === rackId && l.row === row && l.col === col)
-    );
-    cellLayouts.current.push({
-      rackId,
-      row,
-      col,
-      ...layout,
-    });
-  }, []);
+  const handleCellLongPress = (cell: Cell, rackId: number) => {
+    if (!cell.gecko) return;
 
-  const findCellAtPosition = (x: number, y: number): CellLayoutInfo | null => {
-    for (const layout of cellLayouts.current) {
-      if (
-        x >= layout.x &&
-        x <= layout.x + layout.width &&
-        y >= layout.y &&
-        y <= layout.y + layout.height
-      ) {
-        return layout;
-      }
-    }
-    return null;
+    setMoveMode(true);
+    setSelectedGecko({ gecko: cell.gecko, rackId });
+    Alert.alert(
+      '이동 모드',
+      `${cell.gecko.name}을(를) 이동할 위치를 선택하세요.\n빈 칸을 탭하면 이동, 다른 게코가 있는 칸을 탭하면 교환합니다.`,
+      [
+        {
+          text: '취소',
+          style: 'cancel',
+          onPress: () => {
+            setMoveMode(false);
+            setSelectedGecko(null);
+          },
+        },
+        { text: '확인', style: 'default' },
+      ]
+    );
   };
 
-  const handleDragStart = useCallback((gecko: Gecko, rackId: number) => {
-    setDraggingGecko({ gecko, rackId });
-  }, []);
+  const handleMoveOrSwap = async (targetCell: Cell, targetRackId: number) => {
+    if (!selectedGecko) return;
 
-  const handleDrop = useCallback(async (x: number, y: number) => {
-    if (!draggingGecko) return;
+    const { gecko, rackId: sourceRackId } = selectedGecko;
 
-    const targetLayout = findCellAtPosition(x, y);
-    const { gecko, rackId: sourceRackId } = draggingGecko;
-
-    // Reset dragging state first
-    setDraggingGecko(null);
-
-    if (!targetLayout) {
+    // Same cell - cancel
+    if (targetRackId === sourceRackId && targetCell.row === gecko.row && targetCell.col === gecko.column) {
+      setMoveMode(false);
+      setSelectedGecko(null);
       return;
     }
-
-    const { rackId: targetRackId, row: targetRow, col: targetCol } = targetLayout;
-
-    // Same cell - do nothing
-    if (targetRackId === sourceRackId && targetRow === gecko.row && targetCol === gecko.column) {
-      return;
-    }
-
-    // Find target cell gecko
-    const targetRack = racks.find((r) => r.id === targetRackId);
-    const targetGecko = targetRack?.geckos?.find((g) => g.row === targetRow && g.column === targetCol);
 
     try {
-      if (targetGecko) {
+      if (targetCell.gecko) {
         // Swap with another gecko
-        await swapGeckos(gecko.id, targetGecko.id);
+        Alert.alert(
+          '게코 교환',
+          `${gecko.name}과(와) ${targetCell.gecko.name}의 위치를 교환하시겠습니까?`,
+          [
+            {
+              text: '취소',
+              style: 'cancel',
+              onPress: () => {
+                setMoveMode(false);
+                setSelectedGecko(null);
+              },
+            },
+            {
+              text: '교환',
+              onPress: async () => {
+                await swapGeckos(gecko.id, targetCell.gecko!.id);
+                await loadRacks();
+                setMoveMode(false);
+                setSelectedGecko(null);
+              },
+            },
+          ]
+        );
       } else {
         // Move to empty cell
         await moveGecko(gecko.id, {
           rackId: targetRackId,
-          row: targetRow,
-          column: targetCol,
+          row: targetCell.row,
+          column: targetCell.col,
         });
+        await loadRacks();
+        setMoveMode(false);
+        setSelectedGecko(null);
       }
-      await loadRacks();
     } catch (error: any) {
       Alert.alert('오류', error.response?.data?.message || '이동에 실패했습니다.');
+      setMoveMode(false);
+      setSelectedGecko(null);
     }
-  }, [draggingGecko, racks, loadRacks]);
+  };
+
+  const cancelMoveMode = () => {
+    setMoveMode(false);
+    setSelectedGecko(null);
+  };
 
   // Calculate stats
   const totalGeckos = racks.reduce((sum, rack) => sum + (rack.geckos?.length || 0), 0);
@@ -206,12 +211,15 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Drag indicator */}
-      {draggingGecko && (
-        <View style={styles.dragIndicator}>
-          <Text style={styles.dragIndicatorText}>
-            🦎 {draggingGecko.gecko.name} 이동 중 - 원하는 위치에 놓으세요
+      {/* Move mode indicator */}
+      {moveMode && (
+        <View style={styles.moveModeBar}>
+          <Text style={styles.moveModeText}>
+            🦎 {selectedGecko?.gecko.name} 이동 중 - 목표 위치를 탭하세요
           </Text>
+          <Pressable onPress={cancelMoveMode}>
+            <Text style={styles.moveModeCancel}>취소</Text>
+          </Pressable>
         </View>
       )}
 
@@ -224,9 +232,6 @@ export default function HomeScreen() {
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: COLORS.danger }]} />
           <Text style={styles.legendText}>관리 필요</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <Text style={styles.legendHint}>드래그하여 이동</Text>
         </View>
       </View>
 
@@ -247,11 +252,10 @@ export default function HomeScreen() {
               key={rack.id}
               rack={rack}
               onCellPress={(cell) => handleCellPress(cell, rack.id)}
+              onCellLongPress={(cell) => handleCellLongPress(cell, rack.id)}
               onEditRack={() => setEditingRack(rack)}
-              onDragStart={handleDragStart}
-              onDrop={handleDrop}
-              draggingGeckoId={draggingGecko?.gecko.id}
-              registerCellLayout={registerCellLayout}
+              moveMode={moveMode}
+              selectedGeckoId={selectedGecko?.gecko.id}
             />
           ))
         )}
@@ -335,23 +339,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontSize: 14,
   },
-  dragIndicator: {
+  moveModeBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     backgroundColor: COLORS.primaryLight,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.primary,
   },
-  dragIndicatorText: {
+  moveModeText: {
     color: COLORS.primaryDark,
     fontWeight: '600',
     fontSize: 14,
-    textAlign: 'center',
+  },
+  moveModeCancel: {
+    color: COLORS.danger,
+    fontWeight: '600',
+    fontSize: 14,
   },
   legend: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
     gap: 20,
     paddingVertical: 10,
     backgroundColor: COLORS.card,
@@ -371,11 +381,6 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
     color: COLORS.textSecondary,
-  },
-  legendHint: {
-    fontSize: 11,
-    color: COLORS.textLight,
-    fontStyle: 'italic',
   },
   content: {
     flex: 1,

@@ -1,17 +1,16 @@
-import { useMemo, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, LayoutChangeEvent } from 'react-native';
+import { useMemo } from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { COLORS, CARE_THRESHOLD_DAYS } from '../constants/config';
 import type { Rack, Gecko, Cell } from '../types';
-import DraggableGeckoCell from './DraggableGeckoCell';
+import GeckoCell from './GeckoCell';
 
 interface RackGridProps {
   rack: Rack;
   onCellPress: (cell: Cell) => void;
+  onCellLongPress: (cell: Cell) => void;
   onEditRack: () => void;
-  onDragStart: (gecko: Gecko, rackId: number) => void;
-  onDrop: (x: number, y: number) => void;
-  draggingGeckoId?: number;
-  registerCellLayout: (rackId: number, row: number, col: number, layout: { x: number; y: number; width: number; height: number }) => void;
+  moveMode: boolean;
+  selectedGeckoId?: number;
 }
 
 function getGeckoStatus(gecko: Gecko | null): 'empty' | 'good' | 'urgent' {
@@ -33,14 +32,11 @@ function getGeckoStatus(gecko: Gecko | null): 'empty' | 'good' | 'urgent' {
 export default function RackGrid({
   rack,
   onCellPress,
+  onCellLongPress,
   onEditRack,
-  onDragStart,
-  onDrop,
-  draggingGeckoId,
-  registerCellLayout,
+  moveMode,
+  selectedGeckoId,
 }: RackGridProps) {
-  const gridRef = useRef<View>(null);
-
   const grid = useMemo(() => {
     const cells: Cell[][] = [];
     for (let row = rack.rows; row >= 1; row--) {
@@ -55,52 +51,6 @@ export default function RackGrid({
   }, [rack]);
 
   const needsScroll = rack.columns > 4;
-
-  const handleCellLayout = useCallback((cell: Cell, event: LayoutChangeEvent) => {
-    const { x, y, width, height } = event.nativeEvent.layout;
-    // Register with parent including grid offset
-    setTimeout(() => {
-      gridRef.current?.measureInWindow((gridX, gridY) => {
-        if (gridX !== undefined && gridY !== undefined) {
-          registerCellLayout(rack.id, cell.row, cell.col, {
-            x: gridX + x,
-            y: gridY + y,
-            width,
-            height,
-          });
-        }
-      });
-    }, 100);
-  }, [rack.id, registerCellLayout]);
-
-  const handleDragStart = useCallback((cell: Cell, rackId: number) => {
-    if (cell.gecko) {
-      onDragStart(cell.gecko, rackId);
-    }
-  }, [onDragStart]);
-
-  const handleDragEnd = useCallback((x: number, y: number) => {
-    onDrop(x, y);
-  }, [onDrop]);
-
-  const renderCell = (cell: Cell) => (
-    <View
-      key={`${rack.id}-${cell.row}-${cell.col}`}
-      onLayout={(e) => handleCellLayout(cell, e)}
-    >
-      <DraggableGeckoCell
-        cell={cell}
-        rackId={rack.id}
-        status={getGeckoStatus(cell.gecko)}
-        onPress={() => onCellPress(cell)}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        fixedWidth={needsScroll}
-        isDragging={draggingGeckoId === cell.gecko?.id}
-        isDropTarget={draggingGeckoId !== undefined && draggingGeckoId !== cell.gecko?.id}
-      />
-    </View>
-  );
 
   return (
     <View style={styles.container}>
@@ -119,28 +69,47 @@ export default function RackGrid({
 
       {needsScroll ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View
-            ref={gridRef}
-            style={[styles.gridContainer, { minWidth: rack.columns * 80 + 56 }]}
-          >
+          <View style={[styles.gridContainer, { minWidth: rack.columns * 80 + 56 }]}>
             {grid.map((rowCells, rowIdx) => (
               <View key={rowIdx} style={styles.row}>
                 <View style={styles.rowLabel}>
                   <Text style={styles.rowLabelText}>{rack.rows - rowIdx}층</Text>
                 </View>
-                {rowCells.map(renderCell)}
+                {rowCells.map((cell) => (
+                  <GeckoCell
+                    key={`${rack.id}-${cell.row}-${cell.col}`}
+                    cell={cell}
+                    status={getGeckoStatus(cell.gecko)}
+                    onPress={() => onCellPress(cell)}
+                    onLongPress={() => onCellLongPress(cell)}
+                    fixedWidth={true}
+                    isSelected={moveMode && cell.gecko?.id === selectedGeckoId}
+                    isMoveTarget={moveMode && cell.gecko?.id !== selectedGeckoId}
+                  />
+                ))}
               </View>
             ))}
           </View>
         </ScrollView>
       ) : (
-        <View ref={gridRef} style={styles.gridContainer}>
+        <View style={styles.gridContainer}>
           {grid.map((rowCells, rowIdx) => (
             <View key={rowIdx} style={styles.row}>
               <View style={styles.rowLabel}>
                 <Text style={styles.rowLabelText}>{rack.rows - rowIdx}층</Text>
               </View>
-              {rowCells.map(renderCell)}
+              {rowCells.map((cell) => (
+                <GeckoCell
+                  key={`${rack.id}-${cell.row}-${cell.col}`}
+                  cell={cell}
+                  status={getGeckoStatus(cell.gecko)}
+                  onPress={() => onCellPress(cell)}
+                  onLongPress={() => onCellLongPress(cell)}
+                  fixedWidth={false}
+                  isSelected={moveMode && cell.gecko?.id === selectedGeckoId}
+                  isMoveTarget={moveMode && cell.gecko?.id !== selectedGeckoId}
+                />
+              ))}
             </View>
           ))}
         </View>
